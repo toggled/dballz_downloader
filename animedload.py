@@ -1,4 +1,5 @@
 import animegui
+import os
 import pycurl
 import sys
 from PySide.QtCore import *
@@ -6,11 +7,15 @@ from PySide.QtGui import *
 link="http://cache1.tinyvid.net/otaku/"
 #keyword='<a href="3237ep$-Dragon_Ball_Z.mp4">3237ep$-Dragon_Ball_Z.mp4</a>'
 keyword='3237ep$-Dragon_Ball_Z.mp4'
-
+url=""
 filename='dbz_$.mp4'
 start=1
 end=291
 
+def genurl(index):
+    global url
+    url = link+str(index).join(keyword.split('$'))
+    return url
 
 class mainWindow(QMainWindow,animegui.Ui_MainWindow):
     def __init__(self,parent=None):
@@ -34,10 +39,6 @@ class mainWindow(QMainWindow,animegui.Ui_MainWindow):
         self.itempool={}
         self.tablewidget.itemChanged.connect(self.handleItemChanged)
         self.stopall.clicked.connect(self.pauseall)
-        self.c= pycurl.Curl()
-        #self.c.setopt(pycurl.URL, url)
-        self.c.setopt(pycurl.FOLLOWLOCATION, 1)
-        self.c.setopt(pycurl.MAXREDIRS, 5)
 
     def pauseall(self):
         import time
@@ -58,18 +59,32 @@ class mainWindow(QMainWindow,animegui.Ui_MainWindow):
             event.accept()
 
     def handleItemChanged(self,item):
-            print "self.tablewidget.row(item): >>",self.tablewidget.row(item)
+            #print "self.tablewidget.row(item): >>",self.tablewidget.row(item)
+            if self.tablewidget.column(item)!=3:
+                #print 'returning'
+                return
             if item.checkState() == Qt.Checked:#resume
-                    self.threadpool[self.tablewidget.row(item)]=Workerthread(item,self)
-                    self.threadpool[self.tablewidget.row(item)].finished.connect(self.threadDone)
-                    #self.connect(self.threadpool[self.tablewidget.row(item)],SIGNAL("threadDone()"),self.threadDone,Qt.DirectConnection)
-                    self.itempool[self.tablewidget.row(item)]=item
-                    self.threadpool[self.tablewidget.row(item)].start()
-                    print 'started'
-                    print '-->','\n',self.threadpool
+                    #url=
+                    if self.threadpool.get(self.tablewidget.row(item),0)==0:
+                        print 'brand new'
+                        self.threadpool[self.tablewidget.row(item)]=Workerthread(item,self)
+                        self.threadpool[self.tablewidget.row(item)].finished.connect(self.threadDone)
+                        #self.connect(self.threadpool[self.tablewidget.row(item)],SIGNAL("threadDone()"),self.threadDone,Qt.DirectConnection)
+                        self.itempool[self.tablewidget.row(item)]=item
+                        self.threadpool[self.tablewidget.row(item)].start()
+                        print 'started'
+                        print '-->','\n',self.threadpool
+                    else:
+                        print 'dirty'
+                        thrd=self.threadpool[self.tablewidget.row(item)]
+                        thrd.finished.connect(self.threadDone)
+                        self.itempool[self.tablewidget.row(item)]=item
+                        thrd.start()
 
             elif item.checkState()==Qt.Unchecked:
                 print self.threadpool
+                print self.itempool
+                print self.tablewidget.column(item)
                 threadtostop=self.threadpool.get(self.tablewidget.row(item))
                     #threadtostop.exit()
                 threadtostop.stop=1
@@ -81,16 +96,6 @@ class mainWindow(QMainWindow,animegui.Ui_MainWindow):
         print 'done: ',QThread.currentThread()
 
 
-    def progress(self,total, existing, upload_t, upload_d):
-        existing = existing + os.path.getsize(filename)
-        try:
-            frac = float(existing)/float(total)
-        except:
-            frac=0
-        sys.stdout.write("\r%s %3i%%" % ("File downloaded - ", frac*100))
-        #item=QtableWidgetItem(str(frac*100))
-        #self.tablewidget.setItem(i,2,item)#i = which row
-
     def initial_housekeeping(self):
         from bs4 import BeautifulSoup as bs
         #page=urllib.urlopen(link).read()
@@ -100,7 +105,6 @@ class mainWindow(QMainWindow,animegui.Ui_MainWindow):
         m=start
         t=keyword.split('$')
         tofind=str(m).join(t)
-        #print tofind
         contents= pre.contents
         startlink=None
         for i in pre:
@@ -127,15 +131,49 @@ class Workerthread(QThread,mainWindow):
             print item
             self.stop=0
             self.mainwindw=parent
+            self.dloadurl=genurl(self.mainwindw.tablewidget.row(self.item)+1)
+            self.i=self.mainwindw.tablewidget.row(self.item)
+            self.c= pycurl.Curl()
+            self.c.setopt(pycurl.URL, self.dloadurl)
+            self.c.setopt(pycurl.FOLLOWLOCATION, 1)
+            self.c.setopt(pycurl.MAXREDIRS, 5)
+            self.c.setopt(pycurl.NOPROGRESS,0)
+            self.c.setopt(pycurl.PROGRESSFUNCTION,self.getprogress)
+            path=os.getcwd()
+            savedfilename=self.dloadurl.split('/')[-1]
+            self.filename=savedfilename
+            filepath=os.path.join(path,savedfilename)
+            if os.path.exists(filepath):
+                f=open(savedfilename,"ab")
+                self.c.setopt(pycurl.RESUME_FROM,os.path.getsize(savedfilename))
+            else:
+                f=open(savedfilename,"wb")
+            self.c.setopt(pycurl.WRITEDATA,f)
+
+        def getprogress(self,total, existing, upload_t, upload_d):
+            existing = existing + os.path.getsize(self.filename)
+            try:
+                frac = float(existing)/float(total)
+            except:
+                frac=0
+
+            #sys.stdout.write("\r%s %3i%%\n" % ("File downloaded - ", frac*100))
+            item=self.mainwindw.tablewidget.item(self.i,2)
+            item.setText("{0:.2f}".format(frac*100)+"%")
+
+            #self.mainwindw.tablewidget.setItem(self.i,2,item)#i = which row
+            if self.stop:
+                return 1
 
         def __del__(self):
             self.stop=1
             self.wait()
+            self.c.close()
 
         def run(self):
             import time
             print 'thread running'
-            for i in range(1000000):
+            #for i in range(1000000):
 
                 #if self.stop:
                     #print 'inside i'
@@ -143,17 +181,22 @@ class Workerthread(QThread,mainWindow):
                     #self.emit(SIGNAL('threadDone()'))
                     #break
                 #for j in range(1000):
-                    time.sleep(1)
-                    if self.stop:
-                        print 'inside j'
-                        print 'thread stopping'
-                        return
-                        #self.emit(SIGNAL('threadDone()'))
+                    #time.sleep(1)
+                        #if self.stop:
+                            #print 'inside j'
+                            #print 'thread stopping'
+                            #return
+                            #self.emit(SIGNAL('threadDone()'))
                         #break
-                    #print self.mainwindw.tablewidget.row(self.item),'--',self.stop
-            print 'ending'
-
-
+            #print self.mainwindw.tablewidget.row(self.item),'--',self.stop
+                        #print 'ending'
+            while 1:
+                try:
+                    self.c.perform()
+                except:
+                    pass
+                if self.stop:
+                    return
 app=QApplication(sys.argv)
 form=mainWindow()
 form.show()
