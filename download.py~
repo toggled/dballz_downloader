@@ -52,7 +52,7 @@ class Download(Thread):
             c.setopt(pycurl.COOKIE, self.cookies)
         c.perform()
         realurl = c.getinfo(pycurl.EFFECTIVE_URL)
-        print 'real url is: ',realurl
+
         self.filename = realurl.split("/")[-1].strip()
 
         #

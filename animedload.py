@@ -30,7 +30,9 @@ class mainWindow(QMainWindow,animegui.Ui_MainWindow):
                 self.tablewidget.setItem(row,3,item)
                 item=QTableWidgetItem(filename.split('$')[0]+str(row+1)+filename.split('$')[1])
                 self.tablewidget.setItem(row,0,item)
-                item=QTableWidgetItem(str(round(self.sizetable[row+1],2)))
+                sizeinbytes=self.sizetable[row+1]
+                sizeinmb=sizeinbytes/float(1024*1024)
+                item=QTableWidgetItem(str(round(sizeinmb,2)))
                 self.tablewidget.setItem(row,1,item)
                 item=QTableWidgetItem('0%')
                 self.tablewidget.setItem(row,2,item)
@@ -75,21 +77,23 @@ class mainWindow(QMainWindow,animegui.Ui_MainWindow):
                         print 'started'
                         print '-->','\n',self.threadpool
                     else:
-                        print 'dirty'
                         thrd=self.threadpool[self.tablewidget.row(item)]
+                        thrd.stop=0
+                        print 'dirty',thrd
                         thrd.finished.connect(self.threadDone)
                         self.itempool[self.tablewidget.row(item)]=item
                         thrd.start()
 
             elif item.checkState()==Qt.Unchecked:
                 print self.threadpool
-                print self.itempool
-                print self.tablewidget.column(item)
+                #print self.itempool
+                #print self.tablewidget.column(item)
                 threadtostop=self.threadpool.get(self.tablewidget.row(item))
                     #threadtostop.exit()
+                print 'tostop',threadtostop
                 threadtostop.stop=1
                 self.itempool.pop(self.tablewidget.row(item))
-                print 'pause'
+                #print 'pause'
 
 
     def threadDone(self):
@@ -119,8 +123,10 @@ class mainWindow(QMainWindow,animegui.Ui_MainWindow):
             epnum=sent.split('-')[0].split('ep')[-1]
             nm=contents[startidx+1].strip().split()[-1]
             #print epnum
-            self.sizetable[int(epnum)]=(float(nm)/float(1024*1024))
+            self.sizetable[int(epnum)]=(float(nm))
             startidx+=2
+
+
 
         #print self.sizetable
 
@@ -128,30 +134,17 @@ class Workerthread(QThread,mainWindow):
         def __init__(self,item,parent=None):
             QThread.__init__(self)
             self.item=item
-            print item
+            #print item
+            self.chunk=1*1024 #64 KB
             self.stop=0
             self.mainwindw=parent
             self.dloadurl=genurl(self.mainwindw.tablewidget.row(self.item)+1)
             self.i=self.mainwindw.tablewidget.row(self.item)
-            self.c= pycurl.Curl()
-            self.c.setopt(pycurl.URL, self.dloadurl)
-            self.c.setopt(pycurl.FOLLOWLOCATION, 1)
-            self.c.setopt(pycurl.MAXREDIRS, 5)
-            self.c.setopt(pycurl.NOPROGRESS,0)
-            self.c.setopt(pycurl.PROGRESSFUNCTION,self.getprogress)
-            path=os.getcwd()
-            savedfilename=self.dloadurl.split('/')[-1]
-            self.filename=savedfilename
-            filepath=os.path.join(path,savedfilename)
-            if os.path.exists(filepath):
-                f=open(savedfilename,"ab")
-                self.c.setopt(pycurl.RESUME_FROM,os.path.getsize(savedfilename))
-            else:
-                f=open(savedfilename,"wb")
-            self.c.setopt(pycurl.WRITEDATA,f)
+            self.sizeinbytes=parent.sizetable[self.i+1]
+            print self.sizeinbytes
 
         def getprogress(self,total, existing, upload_t, upload_d):
-            existing = existing + os.path.getsize(self.filename)
+
             try:
                 frac = float(existing)/float(total)
             except:
@@ -163,16 +156,52 @@ class Workerthread(QThread,mainWindow):
 
             #self.mainwindw.tablewidget.setItem(self.i,2,item)#i = which row
             if self.stop:
+                print 'return 1'
+                import time
+                time.sleep(1)
+                print 'saved',os.path.getsize(self.filename),'downloaded',existing
                 return 1
+            existing = existing + os.path.getsize(self.filename)
 
         def __del__(self):
             self.stop=1
             self.wait()
+            print 'c closed'
             self.c.close()
 
         def run(self):
-            import time
-            print 'thread running'
+            #import time
+            c= pycurl.Curl()
+            c.setopt(pycurl.URL, self.dloadurl)
+            c.setopt(pycurl.FOLLOWLOCATION, 0)
+            #self.c.setopt(pycurl.NOBODY,0) #1 means header request.
+            #self.c.setopt(pycurl.MAXREDIRS, 5)
+            c.setopt(pycurl.NOPROGRESS,0)
+            c.setopt(pycurl.PROGRESSFUNCTION,self.getprogress)
+            path=os.getcwd()
+            savedfilename=self.dloadurl.split('/')[-1]
+            self.filename=savedfilename
+            filepath=os.path.join(path,savedfilename)
+            if os.path.exists(filepath):
+                f=open(savedfilename,"ab")
+                print 'downloaded already: ',os.path.getsize(savedfilename)/1024
+                c.setopt(pycurl.RESUME_FROM,os.path.getsize(savedfilename))
+            else:
+                f=open(savedfilename,"wb")
+            c.setopt(pycurl.WRITEDATA,f)
+
+            try:
+                print 'before perform'
+                c.perform()
+                print 'after perform'
+            except pycurl.error,e :
+                print e
+                c.close()
+            if self.stop:
+                print 'inside run stop'
+                return
+
+            #print 'thread running'
             #for i in range(1000000):
 
                 #if self.stop:
@@ -190,13 +219,6 @@ class Workerthread(QThread,mainWindow):
                         #break
             #print self.mainwindw.tablewidget.row(self.item),'--',self.stop
                         #print 'ending'
-            while 1:
-                try:
-                    self.c.perform()
-                except:
-                    pass
-                if self.stop:
-                    return
 app=QApplication(sys.argv)
 form=mainWindow()
 form.show()
