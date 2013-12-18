@@ -176,8 +176,8 @@ class Workerthread(QThread,mainWindow):
             c=pycurl.Curl()
             c.setopt(pycurl.URL, self.dloadurl)
             c.setopt(pycurl.FOLLOWLOCATION, 0)
-            c.setopt(pycurl.LOW_SPEED_TIME,5)
-            c.setopt(pycurl.LOW_SPEED_LIMIT,1*1024) # if transfer speed is below 100bytes/sec for 10 sec
+            c.setopt(pycurl.LOW_SPEED_TIME,10)
+            c.setopt(pycurl.LOW_SPEED_LIMIT,1024) # if transfer speed is below 1Kbytes/sec for 10 sec
             #self.c.setopt(pycurl.NOBODY,0) #1 means header request.
             #self.c.setopt(pycurl.MAXREDIRS, 5)
             c.setopt(pycurl.NOPROGRESS,0)
@@ -199,11 +199,13 @@ class Workerthread(QThread,mainWindow):
             else:
                 f=open(savedfilename,"wb")
             c.setopt(pycurl.WRITEDATA,f)
+
             while 1:
                 try:
                     print 'before perform'
+                    self.mainwindw.tablewidget.item(self.i,4).setText("Downloading")
                     c.perform()
-                    print 'after perform'
+                    self.mainwindw.tablewidget.item(self.i,4).setText("Download complete")
                 except pycurl.error,e :
                     print e
                     errorcode=e[0]
@@ -221,6 +223,7 @@ class Workerthread(QThread,mainWindow):
                 print 'inside run stop'
                 self.downloaded=os.path.getsize(self.filename)
                 print self.downloaded
+                self.mainwindw.tablewidget.item(self.i,4).setText("Paused")
                 f.close()
                 return
 
