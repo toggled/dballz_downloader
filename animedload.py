@@ -37,6 +37,8 @@ class mainWindow(QMainWindow,animegui.Ui_MainWindow):
                 self.tablewidget.setItem(row,1,item)
                 item=QTableWidgetItem('0%')
                 self.tablewidget.setItem(row,2,item)
+                item=QTableWidgetItem()
+                self.tablewidget.setItem(row,4,item)
 
         self.threadpool={}
         self.itempool={}
@@ -209,6 +211,9 @@ class Workerthread(QThread,mainWindow):
                     if int(errorcode) == 56 or int(errorcode)== 18: #connection reset by host or connection closed(18)
                         print 'connecting again'
                         continue
+                    if int(errorcode) == 28:
+                        item=self.mainwindw.tablewidget.item(self.i,4)
+                        item.setText('speed too slow.')
                     c.close()
                     f.close()
                     break
