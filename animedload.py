@@ -5,6 +5,7 @@ import sys
 from PySide.QtCore import *
 from PySide.QtGui import *
 link="http://cache1.tinyvid.net/otaku/"
+#link="http://localhost/"
 #keyword='<a href="3237ep$-Dragon_Ball_Z.mp4">3237ep$-Dragon_Ball_Z.mp4</a>'
 keyword='3237ep$-Dragon_Ball_Z.mp4'
 url=""
@@ -102,6 +103,7 @@ class mainWindow(QMainWindow,animegui.Ui_MainWindow):
 
     def initial_housekeeping(self):
         from bs4 import BeautifulSoup as bs
+        #import urllib
         #page=urllib.urlopen(link).read()
         page=open('dbz.htm','r').read()
         soup=bs(page)
@@ -135,33 +137,31 @@ class Workerthread(QThread,mainWindow):
             QThread.__init__(self)
             self.item=item
             #print item
-            self.chunk=1*1024 #64 KB
             self.stop=0
             self.mainwindw=parent
             self.dloadurl=genurl(self.mainwindw.tablewidget.row(self.item)+1)
             self.i=self.mainwindw.tablewidget.row(self.item)
             self.sizeinbytes=parent.sizetable[self.i+1]
             print self.sizeinbytes
+            self.downloaded=0
+            self.totallength=self.sizeinbytes
 
         def getprogress(self,total, existing, upload_t, upload_d):
-
             try:
-                frac = float(existing)/float(total)
+                frac = (self.downloaded+float(existing))/float(total)
             except:
                 frac=0
 
             #sys.stdout.write("\r%s %3i%%\n" % ("File downloaded - ", frac*100))
-            item=self.mainwindw.tablewidget.item(self.i,2)
-            item.setText("{0:.2f}".format(frac*100)+"%")
-
-            #self.mainwindw.tablewidget.setItem(self.i,2,item)#i = which row
+           #self.mainwindw.tablewidget.setItem(self.i,2,item)#i = which row
             if self.stop:
                 print 'return 1'
-                import time
-                time.sleep(1)
-                print 'saved',os.path.getsize(self.filename),'downloaded',existing
+                #import time
+                #time.sleep(1)
+                print 'saved',self.downloaded+float(existing)
                 return 1
-            existing = existing + os.path.getsize(self.filename)
+            item=self.mainwindw.tablewidget.item(self.i,2)
+            item.setText("{0:.2f}".format(frac*100)+"%")
 
         def __del__(self):
             self.stop=1
@@ -171,9 +171,11 @@ class Workerthread(QThread,mainWindow):
 
         def run(self):
             #import time
-            c= pycurl.Curl()
+            c=pycurl.Curl()
             c.setopt(pycurl.URL, self.dloadurl)
             c.setopt(pycurl.FOLLOWLOCATION, 0)
+            c.setopt(pycurl.LOW_SPEED_TIME,5)
+            c.setopt(pycurl.LOW_SPEED_LIMIT,1*1024) # if transfer speed is below 100bytes/sec for 10 sec
             #self.c.setopt(pycurl.NOBODY,0) #1 means header request.
             #self.c.setopt(pycurl.MAXREDIRS, 5)
             c.setopt(pycurl.NOPROGRESS,0)
@@ -184,21 +186,37 @@ class Workerthread(QThread,mainWindow):
             filepath=os.path.join(path,savedfilename)
             if os.path.exists(filepath):
                 f=open(savedfilename,"ab")
-                print 'downloaded already: ',os.path.getsize(savedfilename)/1024
-                c.setopt(pycurl.RESUME_FROM,os.path.getsize(savedfilename))
+                print 'downladed  var',self.downloaded
+                #c.setopt(pycurl.RESUME_FROM,os.path.getsize(savedfilename))
+                r=str(self.downloaded+1)+"-"+str(self.totallength)
+                print r
+                c.setopt(pycurl.RANGE,r)
+                item=self.mainwindw.tablewidget.item(self.i,2)
+                item.setText("{0:.2f}".format(self.downloaded*100/self.totallength)+"%")
+
             else:
                 f=open(savedfilename,"wb")
             c.setopt(pycurl.WRITEDATA,f)
-
-            try:
-                print 'before perform'
-                c.perform()
-                print 'after perform'
-            except pycurl.error,e :
-                print e
-                c.close()
+            while 1:
+                try:
+                    print 'before perform'
+                    c.perform()
+                    print 'after perform'
+                except pycurl.error,e :
+                    print e
+                    errorcode=e[0]
+                    print errorcode
+                    if int(errorcode) == 56 or int(errorcode)== 18: #connection reset by host or connection closed(18)
+                        print 'connecting again'
+                        continue
+                    c.close()
+                    f.close()
+                    break
             if self.stop:
                 print 'inside run stop'
+                self.downloaded=os.path.getsize(self.filename)
+                print self.downloaded
+                f.close()
                 return
 
             #print 'thread running'
