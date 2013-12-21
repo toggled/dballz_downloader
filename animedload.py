@@ -71,36 +71,37 @@ class mainWindow(QMainWindow,animegui.Ui_MainWindow):
             if item.checkState() == Qt.Checked:#resume
                     #url=
                     if self.threadpool.get(self.tablewidget.row(item),0)==0:
-                        print 'brand new'
+                        #print 'brand new'
                         self.threadpool[self.tablewidget.row(item)]=Workerthread(item,self)
                         self.threadpool[self.tablewidget.row(item)].finished.connect(self.threadDone)
                         #self.connect(self.threadpool[self.tablewidget.row(item)],SIGNAL("threadDone()"),self.threadDone,Qt.DirectConnection)
                         self.itempool[self.tablewidget.row(item)]=item
                         self.threadpool[self.tablewidget.row(item)].start()
-                        print 'started'
-                        print '-->','\n',self.threadpool
+                        #print 'started'
+                        #print '-->','\n',self.threadpool
                     else:
                         thrd=self.threadpool[self.tablewidget.row(item)]
                         thrd.stop=0
-                        print 'dirty',thrd
+                        #print 'dirty',thrd
                         thrd.finished.connect(self.threadDone)
                         self.itempool[self.tablewidget.row(item)]=item
                         thrd.start()
 
             elif item.checkState()==Qt.Unchecked:
-                print self.threadpool
+                #print self.threadpool
                 #print self.itempool
                 #print self.tablewidget.column(item)
                 threadtostop=self.threadpool.get(self.tablewidget.row(item))
                     #threadtostop.exit()
-                print 'tostop',threadtostop
+                #print 'tostop',threadtostop
                 threadtostop.stop=1
                 self.itempool.pop(self.tablewidget.row(item))
                 #print 'pause'
 
 
     def threadDone(self):
-        print 'done: ',QThread.currentThread()
+        #print 'done: ',QThread.currentThread()
+        pass
 
 
     def initial_housekeeping(self):
@@ -144,7 +145,7 @@ class Workerthread(QThread,mainWindow):
             self.dloadurl=genurl(self.mainwindw.tablewidget.row(self.item)+1)
             self.i=self.mainwindw.tablewidget.row(self.item)
             self.sizeinbytes=parent.sizetable[self.i+1]
-            print self.sizeinbytes
+            #print self.sizeinbytes
             self.downloaded=0
             self.totallength=self.sizeinbytes
 
@@ -157,10 +158,10 @@ class Workerthread(QThread,mainWindow):
             #sys.stdout.write("\r%s %3i%%\n" % ("File downloaded - ", frac*100))
            #self.mainwindw.tablewidget.setItem(self.i,2,item)#i = which row
             if self.stop:
-                print 'return 1'
+                #print 'return 1'
                 #import time
                 #time.sleep(1)
-                print 'saved',self.downloaded+float(existing)
+                #print 'saved',self.downloaded+float(existing)
                 return 1
             item=self.mainwindw.tablewidget.item(self.i,2)
             item.setText("{0:.2f}".format(frac*100)+"%")
@@ -168,7 +169,7 @@ class Workerthread(QThread,mainWindow):
         def __del__(self):
             self.stop=1
             self.wait()
-            print 'c closed'
+            #print 'c closed'
             self.c.close()
 
         def run(self):
@@ -176,8 +177,8 @@ class Workerthread(QThread,mainWindow):
             c=pycurl.Curl()
             c.setopt(pycurl.URL, self.dloadurl)
             c.setopt(pycurl.FOLLOWLOCATION, 0)
-            c.setopt(pycurl.LOW_SPEED_TIME,10)
-            c.setopt(pycurl.LOW_SPEED_LIMIT,1024) # if transfer speed is below 1Kbytes/sec for 10 sec
+            c.setopt(pycurl.LOW_SPEED_TIME,12*60)
+            c.setopt(pycurl.LOW_SPEED_LIMIT,102) # if transfer speed is below .1Kbytes/sec for 10 min
             #self.c.setopt(pycurl.NOBODY,0) #1 means header request.
             #self.c.setopt(pycurl.MAXREDIRS, 5)
             c.setopt(pycurl.NOPROGRESS,0)
@@ -187,44 +188,50 @@ class Workerthread(QThread,mainWindow):
             self.filename=savedfilename
             filepath=os.path.join(path,savedfilename)
             if os.path.exists(filepath):
+                self.downladed=os.path.getsize(savedfilename)
                 f=open(savedfilename,"ab")
-                print 'downladed  var',self.downloaded
-                #c.setopt(pycurl.RESUME_FROM,os.path.getsize(savedfilename))
-                r=str(self.downloaded+1)+"-"+str(self.totallength)
-                print r
-                c.setopt(pycurl.RANGE,r)
+                #print 'downladed  var',self.downloaded
+                c.setopt(pycurl.RESUME_FROM,self.downloaded)
+                #r=str(self.downloaded)+"-"+str(self.totallength)
+                #print r
+                #c.setopt(pycurl.WRITEDATA,f)
+                #c.setopt(pycurl.RANGE,r)
                 item=self.mainwindw.tablewidget.item(self.i,2)
                 item.setText("{0:.2f}".format(self.downloaded*100/self.totallength)+"%")
 
             else:
                 f=open(savedfilename,"wb")
             c.setopt(pycurl.WRITEDATA,f)
-
+            useragent="Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:25.0) Gecko/20100101 Firefox/25.0"
+            c.setopt(pycurl.USERAGENT,useragent)
             while 1:
                 try:
-                    print 'before perform'
+                    #print 'before perform'
                     self.mainwindw.tablewidget.item(self.i,4).setText("Downloading")
                     c.perform()
                     self.mainwindw.tablewidget.item(self.i,4).setText("Download complete")
                 except pycurl.error,e :
-                    print e
+                    #print e
                     errorcode=e[0]
-                    print errorcode
+                    #print errorcode
                     if int(errorcode) == 56 or int(errorcode)== 18: #connection reset by host or connection closed(18)
-                        print 'connecting again'
+                        #print 'connecting again'
+                        self.downloaded=os.path.getsize(self.filename)
                         continue
                     if int(errorcode) == 28:
                         item=self.mainwindw.tablewidget.item(self.i,4)
+                        self.downloaded=os.path.getsize(self.filename)
                         item.setText('speed too slow.')
                     c.close()
                     f.close()
                     break
             if self.stop:
-                print 'inside run stop'
+                #print 'inside run stop'
                 self.downloaded=os.path.getsize(self.filename)
-                print self.downloaded
+                #print self.downloaded
                 self.mainwindw.tablewidget.item(self.i,4).setText("Paused")
                 f.close()
+                c.close()
                 return
 
             #print 'thread running'

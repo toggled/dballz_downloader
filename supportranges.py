@@ -1,13 +1,16 @@
 import pycurl
 import cStringIO
-import re
+import re,sys
+
+def test(debug_type, debug_msg):
+    print "debug(%d): %s" % (debug_type, debug_msg)
 
 def accepts_byte_ranges(effective_url):
     """Test if the server supports multi-part file download. Method expects effective (absolute) url."""
 
     c = pycurl.Curl()
     header = cStringIO.StringIO()
-
+    c.setopt(pycurl.DEBUGFUNCTION, test)
     # Get http header
     c.setopt(c.VERBOSE,True)
     c.setopt(c.URL, effective_url)
@@ -70,7 +73,8 @@ def getsmptetime(hr,minu,sec):
 if __name__=="__main__":
             effective_url="http://cache1.tinyvid.net/otaku/3237ep1-Dragon_Ball_Z.mp4"
 
-            #print accepts_byte_ranges(effective_url)
+            print accepts_byte_ranges(effective_url)
+            sys.exit(1)
             c = pycurl.Curl()
             #print 'hope'
             #There is still hope, try a simple byte range query

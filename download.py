@@ -34,6 +34,10 @@ class Download(Thread):
         self.stop = False
         self.filename = ""
 
+    def test(self,debug_type, debug_msg):
+        if debug_type!=3:
+             print "debug(%d): %s" % (debug_type, debug_msg)
+
     def run(self):
 
         #
@@ -44,6 +48,8 @@ class Download(Thread):
         c.setopt(pycurl.FOLLOWLOCATION, 1)
         c.setopt(pycurl.MAXREDIRS, 5)
         c.setopt(pycurl.NOBODY, 1)
+        c.setopt(pycurl.VERBOSE,True)
+        c.setopt(pycurl.DEBUGFUNCTION, self.test)
         if self.useragent:
             c.setopt(pycurl.USERAGENT, self.useragent)
 
@@ -62,9 +68,12 @@ class Download(Thread):
         # configure pycurl
         c = pycurl.Curl()
         c.setopt(pycurl.URL, realurl)
+        c.setopt(pycurl.VERBOSE,True)
+        c.setopt(pycurl.DEBUGFUNCTION, self.test)
         c.setopt(pycurl.FOLLOWLOCATION, 0)
         c.setopt(pycurl.NOPROGRESS, 0)
         c.setopt(pycurl.PROGRESSFUNCTION, self.getProgress)
+        
         if self.useragent:
             c.setopt(pycurl.USERAGENT, self.useragent)
 
@@ -92,7 +101,7 @@ class Download(Thread):
     def getProgress(self, total, existing, upload_t, upload_d):
         if total and existing:
             self.progress['downloaded'] = float(existing + self.downloaded)
-            self.progress['total'] = float(total + self.downloaded)
+            self.progress['total'] = float(total)
             self.progress['percent'] = ( self.progress['downloaded'] / self.progress['total']) * 100
 
         if self.stop:
@@ -127,7 +136,7 @@ def main():
         while 1:
             try:
                 progress = d.progress['percent']
-                print("%.2f percent | %.2fM of %.2fM" % (progress, d.progress['downloaded']/1024, d.progress['total']/1024))
+                print("%.2f percent | %.2f of %.2f" % (progress, d.progress['downloaded'], d.progress['total']))
                 if progress == 100:
                     print("")
                     print("Download complete: %s" % d.filename)
